@@ -1,0 +1,6 @@
+DATA_PATH = "data/raw/train.csv"
+WINDOW_SIZE = 30
+BATCH_SIZE = 32
+LEARNING_RATE = 0.0005
+EPOCHS = 15
+MODEL_PATH = "best_model.pt"

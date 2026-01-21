@@ -1,44 +1,141 @@
-from torch.utils.data import DataLoader, TensorDataset
+# from torch.utils.data import DataLoader, TensorDataset
+# import torch
+# import torch.nn as nn
+# import matplotlib.pyplot as plt
+# import numpy as np
+# from torchvision import datasets, transforms
+
+# import train
+
+# model = nn.Sequential(
+# nn.Linear(2, 4),
+# nn.ReLU(),
+# nn.Linear(4, 4),
+# nn.ReLU(),
+# nn.Linear(4, 1),
+# nn.Sigmoid()
+# )
+# x = np.random.uniform(low=-1, high=1, size=(200, 2))
+# y = np.ones(len(x))
+# y[x[:, 0] * x[:, 1] < 0] = 0
+# num_epochs = 200
+# n_train = 100
+# x_train = torch.tensor(x[:n_train, :], dtype=torch.float32)
+# y_train = torch.tensor(y[:n_train], dtype=torch.float32)
+# train_ds = TensorDataset(x_train, y_train)
+# batch_size = 200
+# torch.manual_seed(1)
+# train_dl = DataLoader(train_ds, batch_size, shuffle=True)
+# x_valid = torch.tensor(x[n_train:, :], dtype=torch.float32)
+# y_valid = torch.tensor(y[n_train:], dtype=torch.float32)
+# history = train(model, num_epochs, train_dl, x_valid, y_valid)
+# loss_fn = nn.BCELoss()
+# optimizer = torch.optim.SGD(model.parameters(), lr=0.015)
+# fig = plt.figure(figsize=(16, 4))
+# ax = fig.add_subplot(1, 2, 1)
+# plt.plot(history[0], lw=4)
+# plt.plot(history[1], lw=4)
+# plt.legend(['Train loss', 'Validation loss'], fontsize=15)
+# ax.set_xlabel('Epochs', size=15)
+# ax = fig.add_subplot(1, 2, 2)
+# plt.plot(history[2], lw=4)
+# plt.plot(history[3], lw=4)
+# plt.legend(['Train acc.', 'Validation acc.'], fontsize=15)
+# ax.set_xlabel('Epochs', size=15)
+# import torch
+
+# from models.cnn import CNNBlock
+# from models.lstm import LSTMBlock
+
+
+# x = torch.randn(8, 30, 5)
+
+# cnn = CNNBlock(in_features=5)
+# cnn_out = cnn(x)
+
+# lstm = LSTMBlock(input_size=32)
+# lstm_out = lstm(cnn_out)
+
+# print(cnn_out.shape)
+# print(lstm_out.shape)
+
+# from src.data.stock_dataset import StockDataset
+
+
+# dataset = StockDataset(
+#     csv_path="data/raw/train.csv",
+#     window_size=30
+# )
+
+
+# x, y = dataset[0]
+
+# print(x.shape)  # (30, 5)
+# print(y)        # 0 أو 1
 import torch
-import torch.nn as nn
-import matplotlib.pyplot as plt
-import numpy as np
-from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
 
-import train
+from src.helpers.normalize import normalize_data
+from src.models.stock_classifier import StockClassifier
+from src.train.trainer import Trainer
+from src.train.eval import Evaluator
+from src.helpers.split import time_split
+from src.data.stock_dataset import StockDataset
+from src.data.data_set import TensorDataset
+from src.helpers import config
 
-model = nn.Sequential(
-nn.Linear(2, 4),
-nn.ReLU(),
-nn.Linear(4, 4),
-nn.ReLU(),
-nn.Linear(4, 1),
-nn.Sigmoid()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+model = StockClassifier(num_features=5).to(device)
+dataset = StockDataset(
+    csv_path=config.DATA_PATH,
+    window_size=config.WINDOW_SIZE,
 )
-x = np.random.uniform(low=-1, high=1, size=(200, 2))
-y = np.ones(len(x))
-y[x[:, 0] * x[:, 1] < 0] = 0
-num_epochs = 200
-n_train = 100
-x_train = torch.tensor(x[:n_train, :], dtype=torch.float32)
-y_train = torch.tensor(y[:n_train], dtype=torch.float32)
-train_ds = TensorDataset(x_train, y_train)
-batch_size = 200
-torch.manual_seed(1)
-train_dl = DataLoader(train_ds, batch_size, shuffle=True)
-x_valid = torch.tensor(x[n_train:, :], dtype=torch.float32)
-y_valid = torch.tensor(y[n_train:], dtype=torch.float32)
-history = train(model, num_epochs, train_dl, x_valid, y_valid)
-loss_fn = nn.BCELoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.015)
-fig = plt.figure(figsize=(16, 4))
-ax = fig.add_subplot(1, 2, 1)
-plt.plot(history[0], lw=4)
-plt.plot(history[1], lw=4)
-plt.legend(['Train loss', 'Validation loss'], fontsize=15)
-ax.set_xlabel('Epochs', size=15)
-ax = fig.add_subplot(1, 2, 2)
-plt.plot(history[2], lw=4)
-plt.plot(history[3], lw=4)
-plt.legend(['Train acc.', 'Validation acc.'], fontsize=15)
-ax.set_xlabel('Epochs', size=15)
+
+X = dataset.X
+y = dataset.y
+
+X_train, y_train, X_val, y_val, X_test, y_test = time_split(X, y)
+
+criterion = torch.nn.BCEWithLogitsLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
+X_train, X_val, X_test = normalize_data(
+    X_train, X_val, X_test
+)
+
+train_loader = DataLoader(
+    TensorDataset(X_train, y_train),
+    batch_size=config.BATCH_SIZE,
+    shuffle=False
+)
+
+val_loader = DataLoader(
+    TensorDataset(X_val, y_val),
+    batch_size=config.BATCH_SIZE,
+    shuffle=False
+)
+test_loader = DataLoader(
+    TensorDataset(X_test, y_test),
+    batch_size=config.BATCH_SIZE,
+    shuffle=False
+)
+
+trainer = Trainer(
+    model=model,
+    train_loader=train_loader,
+    val_loader=val_loader,
+    criterion=criterion,
+    optimizer=optimizer,
+    device=device
+)
+
+trainer.fit(epochs=config.EPOCHS)
+
+model.load_state_dict(torch.load(config.MODEL_PATH))
+evaluator = Evaluator(model, test_loader, device)
+acc = evaluator.accuracy()
+print(f"Test Accuracy: {acc:.2%}")
+
+
+
+
