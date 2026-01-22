@@ -73,51 +73,53 @@
 # print(x.shape)  # (30, 5)
 # print(y)        # 0 أو 1
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
-from src.helpers.normalize import normalize_data
 from src.models.stock_classifier import StockClassifier
 from src.train.trainer import Trainer
 from src.train.eval import Evaluator
-from src.helpers.split import time_split
 from src.data.stock_dataset import StockDataset
-from src.data.data_set import TensorDataset
 from src.helpers import config
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-model = StockClassifier(num_features=5).to(device)
 dataset = StockDataset(
     csv_path=config.DATA_PATH,
-    window_size=config.WINDOW_SIZE,
+    window_size=config.WINDOW_SIZE
 )
 
-X = dataset.X
-y = dataset.y
+n = len(dataset)
 
-X_train, y_train, X_val, y_val, X_test, y_test = time_split(X, y)
+train_end = int(n * 0.7)
+val_end = int(n * 0.85)
 
-criterion = torch.nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
-X_train, X_val, X_test = normalize_data(
-    X_train, X_val, X_test
-)
+train_ds = Subset(dataset, range(0, train_end))
+val_ds   = Subset(dataset, range(train_end, val_end))
+test_ds  = Subset(dataset, range(val_end, n))
 
 train_loader = DataLoader(
-    TensorDataset(X_train, y_train),
+    train_ds,
     batch_size=config.BATCH_SIZE,
     shuffle=False
 )
 
 val_loader = DataLoader(
-    TensorDataset(X_val, y_val),
+    val_ds,
     batch_size=config.BATCH_SIZE,
     shuffle=False
 )
+
 test_loader = DataLoader(
-    TensorDataset(X_test, y_test),
+    test_ds,
     batch_size=config.BATCH_SIZE,
     shuffle=False
+)
+
+model = StockClassifier(num_features=7).to(device)
+
+criterion = torch.nn.BCEWithLogitsLoss()
+optimizer = torch.optim.Adam(
+    model.parameters(),
+    lr=config.LEARNING_RATE
 )
 
 trainer = Trainer(
@@ -131,11 +133,8 @@ trainer = Trainer(
 
 trainer.fit(epochs=config.EPOCHS)
 
-model.load_state_dict(torch.load(config.MODEL_PATH))
 evaluator = Evaluator(model, test_loader, device)
 acc = evaluator.accuracy()
+
 print(f"Test Accuracy: {acc:.2%}")
-
-
-
 
