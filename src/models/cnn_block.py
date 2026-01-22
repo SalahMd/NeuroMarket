@@ -6,7 +6,7 @@ class CNNBlock(nn.Module):
         super().__init__()
 
         self.conv = nn.Conv1d(
-            in_channels=in_features,   # عدد الميزات (features)
+            in_channels=in_features,   
             out_channels=out_channels,
             kernel_size=kernel_size
         )
@@ -15,10 +15,7 @@ class CNNBlock(nn.Module):
         self.pool = nn.MaxPool1d(kernel_size=2)
 
     def forward(self, x):
-        # x: (batch, time, features)
-
         x = x.permute(0, 2, 1)
-        # الآن: (batch, features, time)
 
         x = self.conv(x)
         x = self.relu(x)

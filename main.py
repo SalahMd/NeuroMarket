@@ -73,7 +73,9 @@
 # print(x.shape)  # (30, 5)
 # print(y)        # 0 أو 1
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 from src.models.stock_classifier import StockClassifier
 from src.train.trainer import Trainer
@@ -82,39 +84,77 @@ from src.data.stock_dataset import StockDataset
 from src.helpers import config
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-dataset = StockDataset(
-    csv_path=config.DATA_PATH,
-    window_size=config.WINDOW_SIZE
+
+# Load and prepare data
+feature_columns = [
+    "Open", "High", "Low", "Close", "Volume", "Dividends", "Stock Splits"
+]
+target_column = "Close"
+
+# Read the data
+chunks = pd.read_csv(
+    config.DATA_PATH,
+    usecols=feature_columns,
+    chunksize=200_000,
+    engine="python"
 )
+data = pd.concat(chunks)
+data = data.tail(5_000_000)
 
-n = len(dataset)
-
+# Split data
+n = len(data)
 train_end = int(n * 0.7)
 val_end = int(n * 0.85)
 
-train_ds = Subset(dataset, range(0, train_end))
-val_ds   = Subset(dataset, range(train_end, val_end))
-test_ds  = Subset(dataset, range(val_end, n))
+train_data = data.iloc[:train_end]
+val_data = data.iloc[train_end:val_end]
+test_data = data.iloc[val_end:]
 
+# Scale features
+scaler = StandardScaler()
+train_features = scaler.fit_transform(train_data[feature_columns].values)
+val_features = scaler.transform(val_data[feature_columns].values)
+test_features = scaler.transform(test_data[feature_columns].values)
+
+train_targets = train_data[target_column].values
+val_targets = val_data[target_column].values
+test_targets = test_data[target_column].values
+
+# Create datasets
+train_ds = StockDataset(
+    features=train_features,
+    targets=train_targets,
+    window_size=config.WINDOW_SIZE
+)
+val_ds = StockDataset(
+    features=val_features,
+    targets=val_targets,
+    window_size=config.WINDOW_SIZE
+)
+test_ds = StockDataset(
+    features=test_features,
+    targets=test_targets,
+    window_size=config.WINDOW_SIZE
+)
+
+# Create data loaders
 train_loader = DataLoader(
     train_ds,
     batch_size=config.BATCH_SIZE,
     shuffle=False
 )
-
 val_loader = DataLoader(
     val_ds,
     batch_size=config.BATCH_SIZE,
     shuffle=False
 )
-
 test_loader = DataLoader(
     test_ds,
     batch_size=config.BATCH_SIZE,
     shuffle=False
 )
 
-model = StockClassifier(num_features=7).to(device)
+model = StockClassifier(num_features=len(feature_columns)).to(device)
 
 criterion = torch.nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(
