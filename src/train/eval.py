@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 
 class Evaluator:
@@ -24,4 +25,22 @@ class Evaluator:
                 total += y_batch.size(0)
 
         return correct / total
- 
+
+    def mse(self):
+        self.model.eval()
+        total_mse = 0
+        total = 0
+
+        with torch.no_grad():
+            for X_batch, y_batch in self.data_loader:
+                X_batch = X_batch.to(self.device)
+                y_batch = y_batch.to(self.device).float()
+
+                outputs = self.model(X_batch).squeeze()
+                
+                total_mse += F.mse_loss(
+                    outputs, y_batch, reduction="sum"
+                ).item()
+                total += y_batch.size(0)
+
+        return total_mse / total
