@@ -1,11 +1,24 @@
-def time_split(X, y, train_ratio=0.7, val_ratio=0.15):
-    n = len(X)
+import pandas as pd
+from src.helpers import config
 
-    train_end = int(n * train_ratio)
-    val_end = int(n * (train_ratio + val_ratio))
+
+def ticker_split(df, train_ratio=0.6, val_ratio=0.2):
+    train, val, test = [], [], []
+
+    for _, g in df.groupby("Ticker"):
+        n = len(g)
+        tr = int(n * train_ratio)
+        vr = int(n * (train_ratio + val_ratio))
+
+        if tr < config.WINDOW_SIZE or vr - tr < config.WINDOW_SIZE:
+            continue
+
+        train.append(g.iloc[:tr])
+        val.append(g.iloc[tr:vr])
+        test.append(g.iloc[vr:])
 
     return (
-        X[:train_end], y[:train_end],
-        X[train_end:val_end], y[train_end:val_end],
-        X[val_end:], y[val_end:]
+        pd.concat(train),
+        pd.concat(val),
+        pd.concat(test)
     )

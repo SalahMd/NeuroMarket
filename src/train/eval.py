@@ -2,9 +2,9 @@ import torch
 
 
 class Evaluator:
-    def __init__(self, model, data_loader, device):
+    def __init__(self, model, loader, device):
         self.model = model
-        self.data_loader = data_loader
+        self.loader = loader
         self.device = device
 
     def accuracy(self):
@@ -13,15 +13,14 @@ class Evaluator:
         total = 0
 
         with torch.no_grad():
-            for X_batch, y_batch in self.data_loader:
-                X_batch = X_batch.to(self.device)
-                y_batch = y_batch.to(self.device)
+            for X, y in self.loader:
+                X = X.to(self.device)
+                y = y.to(self.device)
 
-                outputs = self.model(X_batch)
-                preds = (torch.sigmoid(outputs) > 0.5).int()
+                outputs = self.model(X)
+                preds = outputs.argmax(dim=1)
 
-                correct += (preds.squeeze() == y_batch).sum().item()
-                total += y_batch.size(0)
+                correct += (preds == y).sum().item()
+                total += y.size(0)
 
-        return correct / total
- 
+        return correct / total if total > 0 else 0

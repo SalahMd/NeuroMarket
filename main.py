@@ -1,180 +1,134 @@
-# from torch.utils.data import DataLoader, TensorDataset
-# import torch
-# import torch.nn as nn
-# import matplotlib.pyplot as plt
-# import numpy as np
-# from torchvision import datasets, transforms
-
-# import train
-
-# model = nn.Sequential(
-# nn.Linear(2, 4),
-# nn.ReLU(),
-# nn.Linear(4, 4),
-# nn.ReLU(),
-# nn.Linear(4, 1),
-# nn.Sigmoid()
-# )
-# x = np.random.uniform(low=-1, high=1, size=(200, 2))
-# y = np.ones(len(x))
-# y[x[:, 0] * x[:, 1] < 0] = 0
-# num_epochs = 200
-# n_train = 100
-# x_train = torch.tensor(x[:n_train, :], dtype=torch.float32)
-# y_train = torch.tensor(y[:n_train], dtype=torch.float32)
-# train_ds = TensorDataset(x_train, y_train)
-# batch_size = 200
-# torch.manual_seed(1)
-# train_dl = DataLoader(train_ds, batch_size, shuffle=True)
-# x_valid = torch.tensor(x[n_train:, :], dtype=torch.float32)
-# y_valid = torch.tensor(y[n_train:], dtype=torch.float32)
-# history = train(model, num_epochs, train_dl, x_valid, y_valid)
-# loss_fn = nn.BCELoss()
-# optimizer = torch.optim.SGD(model.parameters(), lr=0.015)
-# fig = plt.figure(figsize=(16, 4))
-# ax = fig.add_subplot(1, 2, 1)
-# plt.plot(history[0], lw=4)
-# plt.plot(history[1], lw=4)
-# plt.legend(['Train loss', 'Validation loss'], fontsize=15)
-# ax.set_xlabel('Epochs', size=15)
-# ax = fig.add_subplot(1, 2, 2)
-# plt.plot(history[2], lw=4)
-# plt.plot(history[3], lw=4)
-# plt.legend(['Train acc.', 'Validation acc.'], fontsize=15)
-# ax.set_xlabel('Epochs', size=15)
-# import torch
-
-# from models.cnn import CNNBlock
-# from models.lstm import LSTMBlock
-
-
-# x = torch.randn(8, 30, 5)
-
-# cnn = CNNBlock(in_features=5)
-# cnn_out = cnn(x)
-
-# lstm = LSTMBlock(input_size=32)
-# lstm_out = lstm(cnn_out)
-
-# print(cnn_out.shape)
-# print(lstm_out.shape)
-
-# from src.data.stock_dataset import StockDataset
-
-
-# dataset = StockDataset(
-#     csv_path="data/raw/train.csv",
-#     window_size=30
-# )
-
-
-# x, y = dataset[0]
-
-# print(x.shape)  # (30, 5)
-# print(y)        # 0 أو 1
 import torch
 from torch.utils.data import DataLoader
 import pandas as pd
+import numpy as np
 from sklearn.preprocessing import StandardScaler
 
-from src.models.stock_classifier import StockClassifier
+from src.models.stock_predictor import AdvancedStockPredictor
 from src.train.trainer import Trainer
 from src.train.eval import Evaluator
 from src.data.stock_dataset import StockDataset
+from src.helpers.split import ticker_split
 from src.helpers import config
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("="*70)
+print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+print("="*70)
 
-# Load and prepare data
-feature_columns = [
-    "Open", "High", "Low", "Close", "Volume", "Dividends", "Stock Splits"
+# Features المتاحة فقط (حسب المشروع)
+features = [
+    "Open", "High", "Low", "Close",
+    "Volume", "Dividends", "Stock Splits"
 ]
-target_column = "Close"
+target = "Close"
 
-# Read the data
-chunks = pd.read_csv(
+# تحميل البيانات
+data = pd.read_csv(
     config.DATA_PATH,
-    usecols=feature_columns,
-    chunksize=200_000,
-    engine="python"
-)
-data = pd.concat(chunks)
-data = data.tail(5_000_000)
+    parse_dates=["Date"]
+).sort_values(["Ticker", "Date"])
 
-# Split data
-n = len(data)
-train_end = int(n * 0.7)
-val_end = int(n * 0.85)
+# معالجة القيم الشاذة
+data = data.replace([np.inf, -np.inf], np.nan)
+data[["Dividends", "Stock Splits"]] = data[["Dividends", "Stock Splits"]].fillna(0)
+data = data.ffill().bfill()
 
-train_data = data.iloc[:train_end]
-val_data = data.iloc[train_end:val_end]
-test_data = data.iloc[val_end:]
+print(f"إجمالي البيانات: {len(data):,} صف")
+print(f"عدد الأسهم: {data['Ticker'].nunique()}")
 
-# Scale features
+# تقسيم البيانات
+train_df, val_df, test_df = ticker_split(data)
+
+# Normalization
 scaler = StandardScaler()
-train_features = scaler.fit_transform(train_data[feature_columns].values)
-val_features = scaler.transform(val_data[feature_columns].values)
-test_features = scaler.transform(test_data[feature_columns].values)
+train_df[features] = scaler.fit_transform(train_df[features])
+val_df[features] = scaler.transform(val_df[features])
+test_df[features] = scaler.transform(test_df[features])
 
-train_targets = train_data[target_column].values
-val_targets = val_data[target_column].values
-test_targets = test_data[target_column].values
-
-# Create datasets
+# إنشاء Datasets
 train_ds = StockDataset(
-    features=train_features,
-    targets=train_targets,
-    window_size=config.WINDOW_SIZE
-)
-val_ds = StockDataset(
-    features=val_features,
-    targets=val_targets,
-    window_size=config.WINDOW_SIZE
-)
-test_ds = StockDataset(
-    features=test_features,
-    targets=test_targets,
-    window_size=config.WINDOW_SIZE
+    train_df,
+    features,
+    target,
+    window_size=config.WINDOW_SIZE,
+    horizon=config.HORIZON,
+    max_sequences=2_000_000  # زود البيانات
 )
 
-# Create data loaders
+val_ds = StockDataset(
+    val_df,
+    features,
+    target,
+    window_size=config.WINDOW_SIZE,
+    horizon=config.HORIZON,
+    max_sequences=1_000_000
+)
+
+# DataLoaders
 train_loader = DataLoader(
     train_ds,
     batch_size=config.BATCH_SIZE,
-    shuffle=False
+    shuffle=True,
+    num_workers=4,
+    pin_memory=True,
+    persistent_workers=True
 )
+
 val_loader = DataLoader(
     val_ds,
     batch_size=config.BATCH_SIZE,
-    shuffle=False
-)
-test_loader = DataLoader(
-    test_ds,
-    batch_size=config.BATCH_SIZE,
-    shuffle=False
+    shuffle=False,
+    num_workers=4,
+    pin_memory=True,
+    persistent_workers=True
 )
 
-model = StockClassifier(num_features=len(feature_columns)).to(device)
+# النموذج المتقدم
+model = AdvancedStockPredictor(
+    num_features=len(features),
+    dropout=0.3
+).to(device)
 
-criterion = torch.nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(
+total_params = sum(p.numel() for p in model.parameters())
+print(f"\nعدد Parameters: {total_params:,}")
+
+# Optimizer
+optimizer = torch.optim.AdamW(
     model.parameters(),
-    lr=config.LEARNING_RATE
+    lr=config.LEARNING_RATE,
+    weight_decay=1e-4,
+    betas=(0.9, 0.999)
 )
 
+# Scheduler
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode='min',
+    factor=0.5,
+    patience=5,
+    min_lr=1e-6
+)
+
+# التدريب
 trainer = Trainer(
-    model=model,
-    train_loader=train_loader,
-    val_loader=val_loader,
-    criterion=criterion,
-    optimizer=optimizer,
-    device=device
+    model,
+    train_loader,
+    val_loader,
+    optimizer,
+    device,
+    scheduler=scheduler,
+    use_label_smoothing=True
 )
 
-trainer.fit(epochs=config.EPOCHS)
+trainer.fit(config.EPOCHS)
 
-evaluator = Evaluator(model, test_loader, device)
-acc = evaluator.accuracy()
+# التقييم
+checkpoint = torch.load('best_model.pt')
+model.load_state_dict(checkpoint['model_state_dict'])
 
-print(f"Test Accuracy: {acc:.2%}")
-
+evaluator = Evaluator(model, val_loader, device)
+final_acc = evaluator.accuracy()
+print(f"\n{'='*70}")
+print(f"Final Validation Accuracy: {final_acc*100:.2f}%")
+print(f"{'='*70}\n")
