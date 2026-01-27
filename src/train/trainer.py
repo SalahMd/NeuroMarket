@@ -42,7 +42,7 @@ class Trainer:
         if use_label_smoothing:
             self.criterion = LabelSmoothingLoss(classes=2, smoothing=0.1)
         else:
-            self.criterion = nn.CrossEntropyLoss()
+            self.criterion = nn.M()
         
         self.best_val_acc = 0.0
         self.best_val_loss = float('inf')
