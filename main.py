@@ -9,6 +9,7 @@ import joblib
 from src.models.stock_predictor import StockPredictor
 from src.data.stock_dataset import StockDataset
 from src.helpers.split import ticker_split
+from src.helpers.split import ticker_split
 from src.helpers import config
 
 # ===== Setup =====
