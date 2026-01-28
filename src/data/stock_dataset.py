@@ -1,4 +1,3 @@
-# src/data/stock_dataset.py
 import torch
 from torch.utils.data import Dataset
 import numpy as np
@@ -12,7 +11,6 @@ class StockDataset(Dataset):
         window_size=60,
         horizon=30,
         max_sequences=None,
-        threshold=0.0  # بدون threshold - خذ كل البيانات
     ):
         self.features = features
         self.target = target
@@ -38,7 +36,6 @@ class StockDataset(Dataset):
                 future_price = group.loc[i + window_size - 1 + horizon, target]
                 ret = (future_price - current_price) / current_price
                 
-                # بدون threshold - التصنيف المباشر
                 label = 1 if ret > 0 else 0
                 self.indices.append((ticker, i, label))
                 labels_count[label] += 1
