@@ -53,7 +53,6 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
-        tp = fp = fn = 0
 
         with torch.no_grad():
             for X, y in self.val_loader:
@@ -68,23 +67,14 @@ class Trainer:
                 correct += (preds == y).sum().item()
                 total += y.size(0)
 
-                tp += ((preds == 1) & (y == 1)).sum().item()
-                fp += ((preds == 1) & (y == 0)).sum().item()
-                fn += ((preds == 0) & (y == 1)).sum().item()
-
-        acc = correct / total
-        precision = tp / (tp + fp) if tp + fp > 0 else 0
-        recall = tp / (tp + fn) if tp + fn > 0 else 0
-        f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0
-
-        return total_loss / len(self.val_loader), acc, f1
+        return total_loss / len(self.val_loader), correct / total
 
     def fit(self, epochs):
         for epoch in range(epochs):
             start = time.time()
 
             tr_loss, tr_acc = self.train_epoch()
-            va_loss, va_acc, f1 = self.validate_epoch()
+            va_loss, va_acc = self.validate_epoch()
 
             if self.scheduler:
                 self.scheduler.step()
@@ -94,8 +84,7 @@ class Trainer:
             print(
                 f"Epoch [{epoch+1}/{epochs}] "
                 f"TrLoss:{tr_loss:.4f} TrAcc:{tr_acc*100:.2f}% | "
-                f"VaLoss:{va_loss:.4f} VaAcc:{va_acc*100:.2f}% "
-                f"F1:{f1*100:.2f}% | "
+                f"VaLoss:{va_loss:.4f} VaAcc:{va_acc*100:.2f}% | "
                 f"{elapsed/60:.1f}m"
             )
 

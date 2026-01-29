@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-from .cnn_block import CNNBlock
-from .lstm_block import LSTMBlock
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -57,90 +55,4 @@ class StockPredictor(nn.Module):
         x = self.fc3(x)
         
         return x
-    
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
-class AdvancedStockPredictor(nn.Module):
-    def __init__(self, num_features, dropout=0.3):
-        super().__init__()
-        
-        
-        self.conv_short = nn.Sequential(
-            nn.Conv1d(num_features, 64, kernel_size=3, padding=1),  
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.Dropout(dropout)
-        )
-        
-        self.conv_medium = nn.Sequential(
-            nn.Conv1d(num_features, 64, kernel_size=7, padding=3),  
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.Dropout(dropout)
-        )
-        
-        self.conv_long = nn.Sequential(
-            nn.Conv1d(num_features, 64, kernel_size=15, padding=7),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.Dropout(dropout)
-        )
-        
-        self.conv_combine = nn.Sequential(
-            nn.Conv1d(192, 128, kernel_size=1),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.Dropout(dropout)
-        )
-        
-        # 2. Bi-directional LSTM (للسلوك طويل المدى)
-        self.lstm = nn.LSTM(
-            input_size=128,
-            hidden_size=128,
-            num_layers=2,
-            batch_first=True,
-            dropout=dropout if dropout > 0 else 0,
-            bidirectional=True
-        )
-        
-
-        self.attention_fc = nn.Linear(256, 128)
-        self.attention_weights = nn.Linear(128, 1)
-  
-        self.classifier = nn.Sequential(
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(64, 2)
-        )
-        
-    def forward(self, x):
-        batch_size = x.size(0)
-        x_cnn = x.permute(0, 2, 1)  
-        
-
-        short_features = self.conv_short(x_cnn)     
-        medium_features = self.conv_medium(x_cnn)   
-        long_features = self.conv_long(x_cnn)        
-        
-        multi_scale = torch.cat([short_features, medium_features, long_features], dim=1)  
-        combined = self.conv_combine(multi_scale) 
-        
-        lstm_input = combined.permute(0, 2, 1) 
-        lstm_out, _ = self.lstm(lstm_input) 
-        
-
-        attention_input = torch.tanh(self.attention_fc(lstm_out))
-        attention_scores = self.attention_weights(attention_input)
-        attention_weights = F.softmax(attention_scores, dim=1)
-        
-        attended_features = torch.sum(attention_weights * lstm_out, dim=1) 
-
-        output = self.classifier(attended_features)
-        
-        return output

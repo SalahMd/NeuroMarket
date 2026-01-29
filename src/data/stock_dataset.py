@@ -45,10 +45,6 @@ class StockDataset(Dataset):
             random.shuffle(self.indices)
             self.indices = self.indices[:max_sequences]
         
-        # طباعة التوازن
-        total = labels_count[0] + labels_count[1]
-        if total > 0:
-            print(f"Dataset Balance: Up={labels_count[1]/total*100:.1f}% Down={labels_count[0]/total*100:.1f}%")
 
     def __len__(self):
         return len(self.indices)

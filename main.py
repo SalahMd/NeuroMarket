@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 import joblib
-
 from src.models.stock_predictor import StockPredictor
 from src.data.stock_dataset import StockDataset
 from src.helpers.split import ticker_split
@@ -12,7 +11,6 @@ from src.helpers import config
 from src.train.trainer import Trainer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 features = ["Open", "High", "Low", "Volume"]
 target = "Close"
 
@@ -36,7 +34,7 @@ train_ds = StockDataset(
     target,
     window_size=config.WINDOW_SIZE,
     horizon=config.HORIZON,
-    max_sequences=4_000_000
+    max_sequences=1_000_000
 )
 
 val_ds = StockDataset(
@@ -45,13 +43,13 @@ val_ds = StockDataset(
     target,
     window_size=config.WINDOW_SIZE,
     horizon=config.HORIZON,
-    max_sequences=1_000_000
+    max_sequences=500_000
 )
 
 train_loader = DataLoader(
     train_ds,
     batch_size=config.BATCH_SIZE,
-    shuffle=True,
+    shuffle=False,
 )
 
 val_loader = DataLoader(
